@@ -16,6 +16,7 @@ def update_clock():
 # Create the main window
 root = tk.Tk()
 root.title("Millisecond Clock")
+root.resizable(width=False, height=False)
 
 # Create a label for displaying the clock
 label = tk.Label(root, font=('calibri', 40, 'bold'), background='black', foreground='white')
