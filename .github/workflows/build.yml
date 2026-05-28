@@ -1,0 +1,87 @@
+name: Build & Release EXE
+
+permissions:
+  contents: write
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    # ✅ Checkout repo
+    - name: Checkout repo
+      uses: actions/checkout@v4
+
+    # ✅ Setup Python
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    # ✅ Install dependencies
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyinstaller
+
+    # ✅ Generate version (date + commit)
+    - name: Generate version
+      id: version
+      run: |
+        $date = Get-Date -Format "yyyy.MM.dd"
+        $shortSha = "${{ github.sha }}".Substring(0,7)
+        $version = "$date-$shortSha"
+        echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+
+    # ✅ Build EXE (no console + icon)
+    - name: Build EXE
+      run: |
+        pyinstaller --clean --onefile --noconsole --icon=icon.ico --name MillisecondClock clock.py
+
+    # ✅ Rename EXE with version
+    - name: Rename EXE
+      id: rename
+      run: |
+        $exeName = "MillisecondClock-${{ steps.version.outputs.VERSION }}.exe"
+        Rename-Item dist/MillisecondClock.exe $exeName
+        echo "EXE_NAME=$exeName" >> $env:GITHUB_OUTPUT
+
+    # ✅ Create ZIP package
+    - name: Create ZIP
+      run: |
+        $zipName = "MillisecondClock-${{ steps.version.outputs.VERSION }}.zip"
+        Compress-Archive -Path dist/${{ steps.rename.outputs.EXE_NAME }} -DestinationPath dist/$zipName
+
+    # ✅ Upload artifact (backup)
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: clock-build
+        path: dist/*
+
+    # ✅ Create NEW release every build
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: build-${{ steps.version.outputs.VERSION }}
+        name: Millisecond Clock Build ${{ steps.version.outputs.VERSION }}
+        body: |
+          ✅ Automated Build
+
+          Version: ${{ steps.version.outputs.VERSION }}
+          Commit: ${{ github.sha }}
+
+          Includes:
+          - EXE (no console window)
+          - ZIP package
+        files: |
+          dist/*.exe
+          dist/*.zip
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
